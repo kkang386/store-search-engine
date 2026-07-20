@@ -60,7 +60,7 @@ S3:
 |---|---|
 | Region | `us-west-2` |
 | ECS Cluster | `search-engine-cluster-fargate` |
-| App service | `search-app-service-260620` |
+| App service | `search-app-service-xyz` |
 | ECR image (app/worker) | `<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/<ECR_NAMESPACE>/search_engine:latest` |
 | ECR image (nginx) | `<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/<ECR_NAMESPACE>/search_engine_nginx:latest` |
 | S3 imports bucket | `<IMPORTS_BUCKET>` |
@@ -525,25 +525,25 @@ Local dev uses Docker Compose and a local filesystem (no S3, no FUSE mount).
 
 ```bash
 # Start all services
-docker compose -f docker-compose-local-1.yml up -d
+docker compose -f docker-compose.yml up -d
 
 # Stop
-docker compose -f docker-compose-local-1.yml down
+docker compose -f docker-compose.yml down
 
 # Rebuild after code changes
-docker compose -f docker-compose-local-1.yml up -d --build app worker
+docker compose -f docker-compose.yml up -d --build app worker
 
 # Shell into app container
-docker compose -f docker-compose-local-1.yml exec app bash
+docker compose -f docker-compose.yml exec app bash
 
 # Run migrations
-docker compose -f docker-compose-local-1.yml exec app php artisan migrate --force
+docker compose -f docker-compose.yml exec app php artisan migrate --force
 
 # Reindex
-docker compose -f docker-compose-local-1.yml exec app php artisan search:reindex
+docker compose -f docker-compose.yml exec app php artisan search:reindex
 
 # Run import (local CSV files in storage/app/private/imports/<store_code>/)
-docker compose -f docker-compose-local-1.yml exec app php artisan import:products store-a
+docker compose -f docker-compose.yml exec app php artisan import:products store-a
 ```
 
 Import files in local dev go to `storage/app/private/imports/<store_code>/` on the host filesystem (bind-mounted). No SCP needed — copy files there directly.
