@@ -1,0 +1,112 @@
+{
+  "family": "search-app",
+  "networkMode": "host",
+  "requiresCompatibilities": ["EC2"],
+  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskRole",
+  "cpu": "1024",
+  "memory": "3072",
+  "containerDefinitions": [
+    {
+      "name": "app",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/<ECR_NAMESPACE>/search_engine:latest",
+      "imagePullBehavior": "always",
+      "essential": true,
+      "environment": [
+        { "name": "APP_NAME",             "value": "Search Engine" },
+        { "name": "COMPANY_ID",           "value": "ams" },
+        { "name": "APP_ENV",              "value": "production" },
+        { "name": "APP_DEBUG",            "value": "false" },
+        { "name": "APP_URL",              "value": "https://search.example.com" },
+        { "name": "SESSION_DOMAIN",       "value": "search.example.com" },
+        { "name": "DB_CONNECTION",        "value": "mysql" },
+        { "name": "DB_PORT",              "value": "3306" },
+        { "name": "DB_DATABASE",          "value": "search_engine" },
+        { "name": "ELASTICSEARCH_PORT",   "value": "9200" },
+        { "name": "ELASTICSEARCH_SCHEME", "value": "http" },
+        { "name": "QUEUE_CONNECTION",     "value": "redis" },
+        { "name": "REDIS_PORT",           "value": "6379" },
+        { "name": "REDIS_DB",             "value": "3" },
+        { "name": "REDIS_CACHE_DB",       "value": "1" },
+        { "name": "REDIS_SESSION_DB",     "value": "2" },
+        { "name": "REDIS_QUEUE_RETRY_AFTER", "value": "11000" },
+        { "name": "CACHE_DRIVER",         "value": "redis" },
+        { "name": "SESSION_DRIVER",       "value": "redis" },
+        { "name": "SESSION_CONNECTION",   "value": "session" },
+        { "name": "SEARCH_PER_PAGE_MAX",  "value": "192" },
+        { "name": "AWS_DEFAULT_REGION",   "value": "us-west-2" },
+        { "name": "AWS_IMPORTS_BUCKET",   "value": "<IMPORTS_BUCKET>" }
+      ],
+      "secrets": [
+        { "name": "APP_KEY",              "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:APP_KEY::" },
+        { "name": "DB_HOST",              "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:DB_HOST::" },
+        { "name": "DB_USERNAME",          "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:DB_USERNAME::" },
+        { "name": "DB_PASSWORD",          "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:DB_PASSWORD::" },
+        { "name": "ELASTICSEARCH_HOST",   "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:ELASTICSEARCH_HOST::" },
+        { "name": "REDIS_HOST",           "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:REDIS_HOST::" },
+        { "name": "SSH_AUTHORIZED_KEYS", "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:SSH_AUTHORIZED_KEYS::" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/search-app",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "app",
+          "awslogs-create-group": "true"
+        }
+      },
+      "linuxParameters": {
+        "capabilities": { "add": ["SYS_ADMIN"] },
+        "devices": [{ "hostPath": "/dev/fuse", "containerPath": "/dev/fuse" }]
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "php-fpm -t || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    },
+    {
+      "name": "nginx",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/<ECR_NAMESPACE>/search_engine_nginx:latest",
+      "imagePullBehavior": "always",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 80,  "hostPort": 80,  "protocol": "tcp" },
+        { "containerPort": 443, "hostPort": 443, "protocol": "tcp" }
+      ],
+      "environment": [
+        { "name": "APP_DOMAIN", "value": "search.example.com" }
+      ],
+      "secrets": [
+        { "name": "SSL_CERT",        "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:SSL_CERT::" },
+        { "name": "SSL_KEY",         "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:SSL_KEY::" },
+        { "name": "SSL_CA_BUNDLE_1", "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:SSL_CA_BUNDLE_1::" },
+        { "name": "SSL_CA_BUNDLE_2", "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:SSL_CA_BUNDLE_2::" }
+      ],
+      "dependsOn": [
+        {
+          "containerName": "app",
+          "condition": "START"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/search-app",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "nginx",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "pidof nginx || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 60
+      }
+    }
+  ]
+}

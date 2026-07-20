@@ -1,0 +1,28 @@
+# Version control
+.git
+
+# Local env / secrets — never bake into image
+# All env config is injected by ECS (task-def environment + Secrets Manager);
+# no .env file should ship in the image.
+.env
+.env.*
+ams-web-token-local-dev
+
+# Runtime-generated storage — mounted or written at runtime, not needed in image
+storage/app/private
+storage/debugbar
+
+# Local DB/ES bind-mount data — never bake into image
+docker/mysql/data
+docker/elasticsearch/data
+
+# Frontend build tooling
+node_modules
+
+# Dev / ops files not needed in the container
+.claude
+docker-compose*.yml
+docs
+ecs
+ops/aws/.env
+ops/aws/docker*.sh

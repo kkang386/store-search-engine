@@ -1,0 +1,206 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: search_app
+    restart: unless-stopped
+    working_dir: /var/www
+    ports:
+      - "${SSH_PORT:-2222}:22"
+    volumes:
+      - .:/var/www
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+      - ./docker/ssh/authorized_keys:/home/www/.ssh/authorized_keys:ro
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - APP_KEY=${APP_KEY}
+      - APP_DEBUG=${APP_DEBUG:-true}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - DB_CONNECTION=${DB_CONNECTION}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_DATABASE=${DB_DATABASE:-search_engine}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - ELASTICSEARCH_SCHEME=http
+      - QUEUE_CONNECTION=redis
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB:-3}
+      - CACHE_DRIVER=redis
+      - SESSION_DRIVER=redis
+      - SEARCH_PER_PAGE_MAX=${SEARCH_PER_PAGE_MAX}
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      mysql:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - dev_net
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: search_nginx
+    restart: unless-stopped
+    entrypoint: ["/etc/nginx/ssl-entrypoint.sh"]
+    command: ["nginx", "-g", "daemon off;"]
+    ports:
+      - "${APP_PORT:-8080}:80"
+      - "${SSL_PORT:-443}:443"
+    environment:
+      - APP_DOMAIN=${APP_DOMAIN:-localhost}
+      - NGINX_ENVSUBST_FILTER=${APP_DOMAIN}
+      - SSL_ENABLED=${SSL_ENABLED:-true}
+    volumes:
+      - .:/var/www
+      - ./docker/nginx/default.conf.template:/etc/nginx/ssl.conf.template:ro
+      - ./docker/nginx/default-http.conf.template:/etc/nginx/http.conf.template:ro
+      - ./docker/nginx/ssl-entrypoint.sh:/etc/nginx/ssl-entrypoint.sh:ro
+      - ${SSL_CERT:-./docker/nginx/certs/cert.pem}:/etc/nginx/certs/cert.pem:ro
+      - ${SSL_CA_BUNDLE:-./docker/nginx/certs/ca-bundle.pem}:/etc/nginx/certs/ca-bundle.pem:ro
+      - ${SSL_KEY:-./docker/nginx/certs/key.pem}:/etc/nginx/certs/key.pem:ro
+    depends_on:
+      - app
+    networks:
+      - dev_net
+
+  mysql:  # commented out — using local MySQL instead
+    image: mysql:8.4
+    container_name: search_mysql
+    restart: unless-stopped
+    ports:
+      - "${DB_EXTERNAL_PORT:-3307}:3306"
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-search_engine}
+      MYSQL_USER: ${DB_USERNAME:-search_engine}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      # Named volume: persists across `build`, `up`, and `down` (only `down -v`
+      # or a volume prune erases it). A macOS host bind mount can't be used here —
+      # MySQL initializes its data dictionary as case-sensitive, which conflicts
+      # with the case-insensitive host filesystem (lower_case_table_names mismatch).
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./docker/mysql/init.sh:/docker-entrypoint-initdb.d/02-init.sh
+    networks:
+      - dev_net
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: search_elasticsearch
+    restart: unless-stopped
+    ports:
+      - "${ES_PORT:-9200}:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+      - ./docker/elasticsearch/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    networks:
+      - dev_net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.13.4
+    container_name: search_kibana
+    restart: unless-stopped
+    ports:
+      - "${KIBANA_PORT:-5601}:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - xpack.security.enabled=false
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - dev_net
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: search_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - dev_net
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: search_worker
+    restart: unless-stopped
+    working_dir: /var/www
+    command: php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600 --queue=imports,indexing,default
+    volumes:
+      - .:/var/www
+      - ./docker/php/local.ini:/usr/local/etc/php/conf.d/local.ini
+    environment:
+      - APP_ENV=${APP_ENV:-local}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_DATABASE=${DB_DATABASE:-search_engine}
+      - DB_USERNAME=${DB_USERNAME}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - ELASTICSEARCH_HOST=elasticsearch
+      - QUEUE_CONNECTION=redis
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_DB=${REDIS_DB:-3}
+    depends_on:
+      - app
+      - redis
+    networks:
+      - dev_net
+
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: search_grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - dev_net
+
+volumes:
+  mysql_data:
+  elasticsearch_data:
+  redis_data:
+  grafana_data:
+
+networks:
+  dev_net:
+    driver: bridge

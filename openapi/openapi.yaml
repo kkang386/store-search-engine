@@ -1,0 +1,563 @@
+openapi: 3.1.0
+info:
+  title: E-Commerce Search API
+  description: |
+    Production-grade e-commerce search API powered by Elasticsearch 8.x.
+    Supports full-text search, autocomplete, faceted filtering, multi-store, and analytics.
+  version: 1.0.0
+  contact:
+    name: Search Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://api.example.com
+    description: Production
+
+tags:
+  - name: Search
+    description: Full-text search endpoints
+  - name: Suggest
+    description: Autocomplete/suggest endpoints
+  - name: Analytics
+    description: Click tracking and analytics
+  - name: Admin - Synonyms
+    description: Synonym management (requires auth)
+  - name: Admin - Query Rules
+    description: Query rule management (requires auth)
+  - name: Admin - Campaigns
+    description: Search campaign management (requires auth)
+  - name: Admin - Analytics
+    description: Search analytics dashboard (requires auth)
+  - name: Admin - Preview
+    description: Search preview and explanation tools (requires auth)
+
+paths:
+  /api/search:
+    get:
+      tags: [Search]
+      summary: Full-text product search
+      description: |
+        Performs full-text search with faceting, filtering, and sorting.
+        Returns products, dynamic facets, pagination metadata, and query meta.
+      operationId: search
+      parameters:
+        - name: q
+          in: query
+          description: Search query string
+          schema: { type: string, maxLength: 500, example: "canon camera" }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 24 }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [relevance, price_asc, price_desc, newest, rating, best_selling]
+            default: relevance
+        - name: brand[]
+          in: query
+          description: Filter by one or more brands
+          schema: { type: array, items: { type: string } }
+          example: ["Canon", "Sony"]
+        - name: category[]
+          in: query
+          description: Filter by category IDs
+          schema: { type: array, items: { type: integer } }
+        - name: price_min
+          in: query
+          schema: { type: number, format: float, minimum: 0 }
+        - name: price_max
+          in: query
+          schema: { type: number, format: float, minimum: 0 }
+        - name: attributes[]
+          in: query
+          description: Filter by product attributes (e.g., attributes[color][]=Black)
+          schema: { type: object, additionalProperties: { type: array, items: { type: string } } }
+        - name: store_id
+          in: query
+          description: Store ID for multi-store pricing and inventory
+          schema: { type: integer }
+        - name: facets
+          in: query
+          schema: { type: boolean, default: true }
+      responses:
+        '200':
+          description: Successful search response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+              example:
+                products:
+                  - id: 123
+                    sku: "ABC123"
+                    name: "Canon EOS R6 Mark II"
+                    slug: "canon-eos-r6-mark-ii"
+                    brand: "Canon"
+                    price: 1999.99
+                    inventory: 24
+                    rating: 4.8
+                    review_count: 328
+                    is_active: true
+                    category_ids: [1, 5]
+                    category_names: ["Cameras", "Mirrorless Cameras"]
+                    attributes: { color: "Black", sensor_size: "Full Frame" }
+                    score: 18.45
+                facets:
+                  - key: brand
+                    label: Brand
+                    type: terms
+                    values:
+                      - { value: "Canon", label: "Canon", count: 245 }
+                      - { value: "Sony", label: "Sony", count: 198 }
+                  - key: price_range
+                    label: Price
+                    type: range
+                    min: 49.99
+                    max: 4999.99
+                pagination:
+                  total: 1450
+                  page: 1
+                  per_page: 24
+                  total_pages: 61
+                  has_more: true
+                meta:
+                  query: "canon camera"
+                  total_hits: 1450
+                  max_score: 18.45
+                  took_ms: 12
+                  timed_out: false
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/search/suggest:
+    get:
+      tags: [Suggest]
+      summary: Autocomplete suggestions
+      description: |
+        Returns autocomplete suggestions for queries, brands, categories, and products.
+        Target response time: <100ms.
+      operationId: suggest
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 200, example: "canon" }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 10 }
+        - name: store_id
+          in: query
+          schema: { type: integer }
+        - name: types[]
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [queries, brands, categories, products]
+      responses:
+        '200':
+          description: Autocomplete suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuggestResponse'
+              example:
+                queries: ["canon", "canon camera", "canon lens", "canon eos r6"]
+                brands:
+                  - { value: "Canon", label: "Canon", count: 342 }
+                categories:
+                  - { value: "Cameras", label: "Cameras", count: 156 }
+                  - { value: "Mirrorless Cameras", label: "Mirrorless Cameras", count: 48 }
+                products:
+                  - id: 123
+                    name: "Canon EOS R6 Mark II"
+                    slug: "canon-eos-r6-mark-ii"
+                    brand: "Canon"
+                    price: 1999.99
+                    rating: 4.8
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/search/click:
+    post:
+      tags: [Analytics]
+      summary: Track product click
+      description: Records when a user clicks on a product in search results for CTR analytics.
+      operationId: trackClick
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query, product_id, position]
+              properties:
+                query: { type: string }
+                product_id: { type: integer }
+                position: { type: integer, minimum: 0 }
+                store_id: { type: integer }
+      responses:
+        '200':
+          description: Click tracked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: "ok" }
+
+  /api/admin/search/synonyms:
+    get:
+      tags: [Admin - Synonyms]
+      summary: List synonyms
+      security: [{ sanctum: [] }]
+      parameters:
+        - name: store_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Paginated synonym list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSynonyms'
+    post:
+      tags: [Admin - Synonyms]
+      summary: Create synonym
+      security: [{ sanctum: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SynonymInput'
+      responses:
+        '201':
+          description: Synonym created
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /api/admin/search/query-rules:
+    get:
+      tags: [Admin - Query Rules]
+      summary: List query rules
+      security: [{ sanctum: [] }]
+      responses:
+        '200':
+          description: Paginated query rules
+    post:
+      tags: [Admin - Query Rules]
+      summary: Create query rule
+      security: [{ sanctum: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QueryRuleInput'
+      responses:
+        '201':
+          description: Rule created
+
+  /api/admin/search/analytics:
+    get:
+      tags: [Admin - Analytics]
+      summary: Analytics dashboard metrics
+      security: [{ sanctum: [] }]
+      parameters:
+        - name: store_id
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: days
+          in: query
+          schema: { type: integer, default: 7 }
+      responses:
+        '200':
+          description: Dashboard metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyticsDashboard'
+
+  /api/admin/search/preview:
+    post:
+      tags: [Admin - Preview]
+      summary: Preview search results with query DSL
+      security: [{ sanctum: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [q]
+              properties:
+                q: { type: string }
+                sort: { type: string }
+                store_id: { type: integer }
+      responses:
+        '200':
+          description: Search results with query DSL
+
+  /api/admin/search/preview/explain:
+    post:
+      tags: [Admin - Preview]
+      summary: Explain why a product ranked at a position
+      security: [{ sanctum: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [q, product_id]
+              properties:
+                q: { type: string }
+                product_id: { type: integer }
+                store_id: { type: integer }
+      responses:
+        '200':
+          description: Ranking explanation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RankingExplanation'
+
+components:
+  securitySchemes:
+    sanctum:
+      type: http
+      scheme: bearer
+
+  schemas:
+    Product:
+      type: object
+      properties:
+        id: { type: integer }
+        sku: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        brand: { type: string, nullable: true }
+        price: { type: number, format: float }
+        inventory: { type: integer }
+        rating: { type: number, format: float }
+        review_count: { type: integer }
+        sales_rank: { type: integer }
+        is_active: { type: boolean }
+        category_ids: { type: array, items: { type: integer } }
+        category_names: { type: array, items: { type: string } }
+        attributes: { type: object }
+        score: { type: number, format: float, nullable: true }
+        highlight: { type: object, nullable: true }
+
+    Facet:
+      type: object
+      properties:
+        key: { type: string }
+        label: { type: string }
+        type: { type: string, enum: [terms, range] }
+        values:
+          type: array
+          items:
+            type: object
+            properties:
+              value: { type: string }
+              label: { type: string }
+              count: { type: integer }
+        min: { type: number, nullable: true }
+        max: { type: number, nullable: true }
+
+    Pagination:
+      type: object
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        per_page: { type: integer }
+        total_pages: { type: integer }
+        has_more: { type: boolean }
+
+    SearchMeta:
+      type: object
+      properties:
+        query: { type: string }
+        total_hits: { type: integer }
+        max_score: { type: number }
+        took_ms: { type: integer }
+        timed_out: { type: boolean }
+        corrected_query: { type: string, nullable: true }
+        store_id: { type: integer, nullable: true }
+
+    SearchResponse:
+      type: object
+      properties:
+        products:
+          type: array
+          items: { $ref: '#/components/schemas/Product' }
+        facets:
+          type: array
+          items: { $ref: '#/components/schemas/Facet' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+        meta: { $ref: '#/components/schemas/SearchMeta' }
+        banner:
+          type: object
+          nullable: true
+          properties:
+            html: { type: string }
+            metadata: { type: object }
+        redirect: { type: string, nullable: true }
+
+    SuggestResponse:
+      type: object
+      properties:
+        queries:
+          type: array
+          items: { type: string }
+        brands:
+          type: array
+          items:
+            type: object
+            properties:
+              value: { type: string }
+              label: { type: string }
+              count: { type: integer }
+        categories:
+          type: array
+          items:
+            type: object
+            properties:
+              value: { type: string }
+              label: { type: string }
+              count: { type: integer }
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              slug: { type: string }
+              brand: { type: string }
+              price: { type: number }
+              rating: { type: number }
+
+    SynonymInput:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string, enum: [equivalent, one_way] }
+        terms: { type: array, items: { type: string } }
+        from_term: { type: string }
+        to_term: { type: string }
+        is_active: { type: boolean, default: true }
+        store_id: { type: integer, nullable: true }
+
+    PaginatedSynonyms:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              type: { type: string }
+              terms: { type: array, items: { type: string } }
+              from_term: { type: string, nullable: true }
+              to_term: { type: string, nullable: true }
+              is_active: { type: boolean }
+        total: { type: integer }
+        per_page: { type: integer }
+
+    QueryRuleInput:
+      type: object
+      required: [query_pattern, match_type, action]
+      properties:
+        query_pattern: { type: string }
+        match_type: { type: string, enum: [exact, contains, starts_with, regex] }
+        action: { type: string, enum: [pin, exclude, boost, bury, redirect, banner] }
+        product_ids: { type: array, items: { type: integer } }
+        boost_factor: { type: number, minimum: 0.01 }
+        pin_position: { type: integer, minimum: 0 }
+        redirect_url: { type: string, format: uri }
+        banner_html: { type: string }
+        is_active: { type: boolean, default: true }
+        starts_at: { type: string, format: date-time, nullable: true }
+        ends_at: { type: string, format: date-time, nullable: true }
+        priority: { type: integer, default: 0 }
+        store_id: { type: integer, nullable: true }
+
+    AnalyticsDashboard:
+      type: object
+      properties:
+        top_queries:
+          type: array
+          items:
+            type: object
+            properties:
+              query: { type: string }
+              searches: { type: integer }
+              avg_results: { type: number }
+        zero_result_queries:
+          type: array
+          items:
+            type: object
+            properties:
+              query: { type: string }
+              occurrences: { type: integer }
+        ctr: { type: number, description: "Click-through rate percentage" }
+        avg_latency_ms:
+          type: object
+          properties:
+            p50: { type: integer }
+            p95: { type: integer }
+            p99: { type: integer }
+            avg: { type: integer }
+        search_volume:
+          type: array
+          items:
+            type: object
+            properties:
+              date: { type: string, format: date }
+              count: { type: integer }
+        facet_usage: { type: object }
+
+    RankingExplanation:
+      type: object
+      properties:
+        product_id: { type: integer }
+        score: { type: number }
+        ranking_factors:
+          type: object
+          properties:
+            total_score: { type: number }
+            text_relevance: { type: number }
+            inventory_score: { type: number }
+            rating_score: { type: number }
+            inventory: { type: integer }
+            rating: { type: number }
+            sales_rank: { type: integer }
+            review_count: { type: integer }
+            is_featured: { type: boolean }
+        raw_explanation: { type: object, nullable: true }
+
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+              errors:
+                type: object
+                additionalProperties:
+                  type: array
+                  items: { type: string }

@@ -1,0 +1,221 @@
+### E-Commerce Search API — Example Requests
+### Use with VS Code REST Client or similar
+
+@base = http://localhost:8080
+@token = YOUR_SANCTUM_TOKEN_HERE
+
+###
+### SECTION 1: PUBLIC SEARCH ENDPOINTS
+###
+
+### Basic keyword search
+GET {{base}}/api/search?q=canon camera
+
+### Search with brand filter
+GET {{base}}/api/search?q=camera&brand[]=Canon&brand[]=Sony
+
+### Search with price range
+GET {{base}}/api/search?q=monitor&price_min=200&price_max=800
+
+### Search with multiple attribute filters
+GET {{base}}/api/search?q=camera&attributes[color][]=Black&attributes[sensor_size][]=Full+Frame
+
+### Search sorted by price ascending
+GET {{base}}/api/search?q=headphones&sort=price_asc
+
+### Search with pagination
+GET {{base}}/api/search?q=camera&page=2&per_page=12
+
+### Search with store context (multi-store)
+GET {{base}}/api/search?q=camera&store_id=2
+
+### Faceted search (all facet types)
+GET {{base}}/api/search?q=camera&facets=true
+
+### Search without facets (faster)
+GET {{base}}/api/search?q=camera&facets=false
+
+### Typo tolerance: "canoon" → Canon
+GET {{base}}/api/search?q=canoon
+
+### Synonym expansion: "ssd" → solid state drive
+GET {{base}}/api/search?q=ssd
+
+### Synonym expansion: "iphone" → apple iphone
+GET {{base}}/api/search?q=iphone
+
+### Multi-term attribute search
+GET {{base}}/api/search?q=black+sony+camera
+
+### Sort by best selling
+GET {{base}}/api/search?q=camera&sort=best_selling
+
+### Sort by rating
+GET {{base}}/api/search?q=headphones&sort=rating
+
+###
+### SECTION 2: AUTOCOMPLETE / SUGGEST ENDPOINTS
+###
+
+### Autocomplete: prefix 'can'
+GET {{base}}/api/search/suggest?q=can
+
+### Autocomplete: prefix 'sony'
+GET {{base}}/api/search/suggest?q=sony
+
+### Autocomplete with limit
+GET {{base}}/api/search/suggest?q=cam&limit=5
+
+### Autocomplete with store context
+GET {{base}}/api/search/suggest?q=cam&store_id=1
+
+### Autocomplete: type filter — brands only
+GET {{base}}/api/search/suggest?q=can&types[]=brands
+
+### Autocomplete with typo
+GET {{base}}/api/search/suggest?q=cann
+
+###
+### SECTION 3: ANALYTICS TRACKING
+###
+
+### Track a click event
+POST {{base}}/api/search/click
+Content-Type: application/json
+
+{
+    "query": "canon camera",
+    "product_id": 123,
+    "position": 0,
+    "store_id": 1
+}
+
+###
+### SECTION 4: ADMIN ENDPOINTS (require auth)
+###
+
+### List synonyms
+GET {{base}}/api/admin/search/synonyms
+Authorization: Bearer {{token}}
+
+### Create an equivalent synonym
+POST {{base}}/api/admin/search/synonyms
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "type": "equivalent",
+    "terms": ["tv", "television", "telly"],
+    "is_active": true
+}
+
+### Create a one-way synonym
+POST {{base}}/api/admin/search/synonyms
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "type": "one_way",
+    "from_term": "iphone",
+    "to_term": "apple iphone",
+    "is_active": true
+}
+
+### Create a query rule — pin product to top
+POST {{base}}/api/admin/search/query-rules
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "query_pattern": "canon",
+    "match_type": "exact",
+    "action": "pin",
+    "product_ids": [123, 456],
+    "pin_position": 0,
+    "priority": 100,
+    "is_active": true
+}
+
+### Create a query rule — exclude product
+POST {{base}}/api/admin/search/query-rules
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "query_pattern": "canon",
+    "match_type": "contains",
+    "action": "exclude",
+    "product_ids": [999],
+    "is_active": true
+}
+
+### Create a query rule — redirect
+POST {{base}}/api/admin/search/query-rules
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "query_pattern": "sale",
+    "match_type": "exact",
+    "action": "redirect",
+    "redirect_url": "/sale",
+    "is_active": true
+}
+
+### Create a search campaign
+POST {{base}}/api/admin/search/campaigns
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "name": "Black Friday Camera Boost",
+    "type": "boost",
+    "query_patterns": ["camera", "dslr", "mirrorless"],
+    "product_ids": [123, 456, 789],
+    "boost_factor": 2.0,
+    "starts_at": "2024-11-29T00:00:00Z",
+    "ends_at": "2024-11-30T23:59:59Z",
+    "is_active": true
+}
+
+### Get analytics dashboard
+GET {{base}}/api/admin/search/analytics?store_id=1&days=7
+Authorization: Bearer {{token}}
+
+### Get top queries
+GET {{base}}/api/admin/search/analytics/top-queries?store_id=1&limit=20
+Authorization: Bearer {{token}}
+
+### Get zero-result queries
+GET {{base}}/api/admin/search/analytics/zero-results?store_id=1
+Authorization: Bearer {{token}}
+
+### Search preview (with query DSL)
+POST {{base}}/api/admin/search/preview
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "q": "canon camera",
+    "sort": "relevance",
+    "store_id": 1
+}
+
+### Explain why a product ranked
+POST {{base}}/api/admin/search/preview/explain
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "q": "canon camera",
+    "product_id": 123,
+    "store_id": 1
+}
+
+### List audit log
+GET {{base}}/api/admin/search/audit-log?entity_type=App\Models\QueryRule
+Authorization: Bearer {{token}}
+
+### Get Grafana metrics
+GET {{base}}/api/admin/search/analytics/grafana?store_id=1&days=7
+Authorization: Bearer {{token}}

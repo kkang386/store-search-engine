@@ -1,0 +1,128 @@
+{
+  "version": "1.0",
+  "description": "Search benchmark dataset for e-commerce search engine",
+  "queries": [
+    {
+      "id": "q001",
+      "query": "canon camera",
+      "type": "search",
+      "expected_product_ids": [1, 2, 3, 4, 5],
+      "relevant_brands": ["Canon"],
+      "relevant_categories": ["Cameras", "Mirrorless Cameras", "DSLR Cameras"],
+      "min_results": 10,
+      "notes": "Basic brand + category search"
+    },
+    {
+      "id": "q002",
+      "query": "sony mirrorless",
+      "type": "search",
+      "expected_product_ids": [10, 11, 12],
+      "relevant_brands": ["Sony"],
+      "relevant_categories": ["Mirrorless Cameras"],
+      "min_results": 5
+    },
+    {
+      "id": "q003",
+      "query": "black sony camera",
+      "type": "search",
+      "expected_product_ids": [10, 11, 12, 13],
+      "relevant_brands": ["Sony"],
+      "relevant_attributes": {"color": "Black"},
+      "min_results": 3,
+      "notes": "Multi-term attribute search"
+    },
+    {
+      "id": "q004",
+      "query": "canoon",
+      "type": "search",
+      "expected_product_ids": [1, 2, 3, 4],
+      "relevant_brands": ["Canon"],
+      "min_results": 5,
+      "notes": "Typo tolerance test"
+    },
+    {
+      "id": "q005",
+      "query": "4k monitor",
+      "type": "search",
+      "relevant_categories": ["Monitors"],
+      "relevant_attributes": {"resolution": "4K"},
+      "min_results": 5
+    },
+    {
+      "id": "q006",
+      "query": "ssd 1tb",
+      "type": "search",
+      "relevant_categories": ["Storage"],
+      "relevant_attributes": {"storage": "1TB"},
+      "min_results": 3,
+      "notes": "Synonym: ssd => solid state drive"
+    },
+    {
+      "id": "q007",
+      "query": "iphone",
+      "type": "search",
+      "relevant_brands": ["Apple"],
+      "min_results": 5,
+      "notes": "Synonym: iphone => apple iphone"
+    },
+    {
+      "id": "q008",
+      "query": "gaming headset",
+      "type": "search",
+      "relevant_categories": ["Headsets", "Gaming"],
+      "min_results": 5
+    },
+    {
+      "id": "q009",
+      "query": "wireless keyboard",
+      "type": "search",
+      "relevant_categories": ["Keyboards"],
+      "relevant_attributes": {"connectivity": "Wireless"},
+      "min_results": 5
+    },
+    {
+      "id": "q010",
+      "query": "nikon lens rf mount",
+      "type": "search",
+      "relevant_brands": ["Nikon"],
+      "relevant_attributes": {"mount": "RF"},
+      "min_results": 2
+    }
+  ],
+  "suggest_queries": [
+    {
+      "id": "sq001",
+      "query": "can",
+      "expected_brands": ["Canon"],
+      "expected_categories": ["Cameras"],
+      "min_brand_results": 1
+    },
+    {
+      "id": "sq002",
+      "query": "sony",
+      "expected_brands": ["Sony"],
+      "min_brand_results": 1
+    },
+    {
+      "id": "sq003",
+      "query": "cam",
+      "expected_categories": ["Cameras"],
+      "min_category_results": 1
+    }
+  ],
+  "faceted_queries": [
+    {
+      "id": "fq001",
+      "query": "camera",
+      "filters": {"brand": ["Canon", "Sony"]},
+      "expected_facets": ["brand", "price_range", "sensor_size"],
+      "min_results": 5
+    },
+    {
+      "id": "fq002",
+      "query": "monitor",
+      "expected_facets": ["brand", "resolution", "refresh_rate", "panel_type"],
+      "min_results": 3
+    }
+  ]
+}

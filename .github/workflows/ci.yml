@@ -1,0 +1,158 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: rootsecret
+          MYSQL_DATABASE: search_engine_test
+          MYSQL_USER: search
+          MYSQL_PASSWORD: secret
+        ports: ["3306:3306"]
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=5
+
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          "ES_JAVA_OPTS": "-Xms512m -Xmx512m"
+        ports: ["9200:9200"]
+        options: >-
+          --health-cmd="curl -s http://localhost:9200/_cluster/health | grep -q 'green\|yellow'"
+          --health-interval=15s
+          --health-timeout=10s
+          --health-retries=10
+
+      redis:
+        image: redis:7.2-alpine
+        ports: ["6379:6379"]
+        options: --health-cmd="redis-cli ping" --health-interval=5s --health-timeout=3s --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, xml, ctype, iconv, intl, pdo_mysql, redis, zip
+          coverage: xdebug
+
+      - name: Cache Composer
+        uses: actions/cache@v3
+        with:
+          path: vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('composer.lock') }}
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Copy .env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Configure test environment
+        run: |
+          echo "DB_CONNECTION=mysql" >> .env
+          echo "DB_HOST=127.0.0.1" >> .env
+          echo "DB_PORT=3306" >> .env
+          echo "DB_DATABASE=search_engine_test" >> .env
+          echo "DB_USERNAME=search" >> .env
+          echo "DB_PASSWORD=secret" >> .env
+          echo "ELASTICSEARCH_HOST=localhost" >> .env
+          echo "ELASTICSEARCH_PORT=9200" >> .env
+          echo "QUEUE_CONNECTION=sync" >> .env
+          echo "CACHE_DRIVER=array" >> .env
+
+      - name: Run migrations
+        run: php artisan migrate --force
+
+      - name: Setup Elasticsearch indexes
+        run: bash elasticsearch/setup.sh
+
+      - name: Run unit tests
+        run: php artisan test --testsuite=Unit
+
+      - name: Run feature tests
+        run: php artisan test --testsuite=Feature
+
+  benchmark:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+
+    services:
+      elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+        ports: ["9200:9200"]
+        options: --health-cmd="curl -s http://localhost:9200/_cluster/health | grep -q 'green\|yellow'" --health-interval=15s --health-timeout=10s --health-retries=10
+
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: rootsecret
+          MYSQL_DATABASE: search_engine_bench
+          MYSQL_USER: search
+          MYSQL_PASSWORD: secret
+        ports: ["3306:3306"]
+        options: --health-cmd="mysqladmin ping"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, xml, pdo_mysql, redis, zip
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Setup environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          echo "DB_DATABASE=search_engine_bench" >> .env
+          echo "ELASTICSEARCH_HOST=localhost" >> .env
+
+      - name: Seed benchmark data
+        run: |
+          php artisan migrate --force
+          php artisan db:seed --class=ProductSeeder --force
+          php artisan search:reindex
+
+      - name: Run benchmark
+        run: php artisan search:benchmark --ci --dataset=storage/benchmarks/dataset.json
+
+      - name: Upload benchmark report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: benchmark-report
+          path: storage/app/benchmarks/
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+      - run: composer install --no-interaction --prefer-dist
+      - run: vendor/bin/pint --test

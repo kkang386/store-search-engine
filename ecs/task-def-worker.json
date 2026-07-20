@@ -1,0 +1,67 @@
+{
+  "family": "search-worker",
+  "networkMode": "bridge",
+  "requiresCompatibilities": ["EC2"],
+  "executionRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<AWS_ACCOUNT_ID>:role/ecsTaskRole",
+  "cpu": "256",
+  "memory": "512",
+  "containerDefinitions": [
+    {
+      "name": "worker",
+      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/<ECR_NAMESPACE>/search_engine:latest",
+      "imagePullBehavior": "always",
+      "essential": true,
+      "command": [
+        "/entrypoint.sh",
+        "php", "artisan", "queue:work", "redis",
+        "--sleep=3",
+        "--tries=3",
+        "--max-time=3600",
+        "--queue=imports,indexing,default"
+      ],
+      "environment": [
+        { "name": "APP_NAME",             "value": "Search Engine" },
+        { "name": "COMPANY_ID",           "value": "ams" },
+        { "name": "APP_ENV",              "value": "production" },
+        { "name": "APP_DEBUG",            "value": "false" },
+        { "name": "APP_URL",              "value": "https://search.example.com" },
+        { "name": "DB_CONNECTION",        "value": "mysql" },
+        { "name": "DB_PORT",              "value": "3306" },
+        { "name": "DB_DATABASE",          "value": "search_engine" },
+        { "name": "ELASTICSEARCH_PORT",   "value": "9200" },
+        { "name": "ELASTICSEARCH_SCHEME", "value": "http" },
+        { "name": "QUEUE_CONNECTION",     "value": "redis" },
+        { "name": "REDIS_PORT",           "value": "6379" },
+        { "name": "REDIS_DB",             "value": "3" },
+        { "name": "REDIS_CACHE_DB",       "value": "1" },
+        { "name": "REDIS_SESSION_DB",     "value": "2" },
+        { "name": "REDIS_QUEUE_RETRY_AFTER", "value": "11000" },
+        { "name": "CACHE_DRIVER",         "value": "redis" },
+        { "name": "AWS_DEFAULT_REGION",   "value": "us-west-2" },
+        { "name": "AWS_IMPORTS_BUCKET",   "value": "<IMPORTS_BUCKET>" }
+      ],
+      "secrets": [
+        { "name": "APP_KEY",              "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:APP_KEY::" },
+        { "name": "DB_HOST",              "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:DB_HOST::" },
+        { "name": "DB_USERNAME",          "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:DB_USERNAME::" },
+        { "name": "DB_PASSWORD",          "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:DB_PASSWORD::" },
+        { "name": "ELASTICSEARCH_HOST",   "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:ELASTICSEARCH_HOST::" },
+        { "name": "REDIS_HOST",           "valueFrom": "arn:aws:secretsmanager:us-west-2:<AWS_ACCOUNT_ID>:secret:search-engine/prod:REDIS_HOST::" }
+      ],
+      "linuxParameters": {
+        "capabilities": { "add": ["SYS_ADMIN"] },
+        "devices": [{ "hostPath": "/dev/fuse", "containerPath": "/dev/fuse" }]
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/search-worker",
+          "awslogs-region": "us-west-2",
+          "awslogs-stream-prefix": "worker",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

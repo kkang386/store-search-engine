@@ -1,0 +1,54 @@
+# Environment
+.env
+.env.*
+!.env.example
+!.env.local
+/.gitignore-all/
+
+# SSL certificates (never commit private keys or certs)
+docker/nginx/certs/*.pem
+docker/nginx/certs/*.crt
+docker/nginx/certs/*.key
+docker/nginx/certs/*.ca-bundle
+docker/nginx/certs/*.txt
+
+# Dependencies
+/vendor/
+/node_modules/
+
+# Laravel generated
+/bootstrap/cache/*.php
+/storage/*.key
+/storage/app/public/*
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/testing/*
+/storage/framework/views/*
+/storage/logs/*
+/storage/app/benchmarks/*
+/storage/app/private/benchmarks/*
+/storage/app/private/imports/*
+
+# Build artifacts
+/public/hot
+/public/storage
+/public/build
+
+# Composer
+composer.phar
+composer.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker volumes (local data)
+docker/mysql/data/
+docker/elasticsearch/data/
+docker/ssh/authorized_keys

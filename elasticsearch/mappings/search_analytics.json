@@ -1,0 +1,26 @@
+{
+  "settings": {
+    "number_of_shards": 2,
+    "number_of_replicas": 1,
+    "refresh_interval": "5s"
+  },
+  "mappings": {
+    "properties": {
+      "query": { "type": "keyword", "fields": { "text": { "type": "text" } } },
+      "store_id": { "type": "integer" },
+      "user_id": { "type": "keyword" },
+      "session_id": { "type": "keyword" },
+      "result_count": { "type": "integer" },
+      "clicked_product_id": { "type": "long" },
+      "click_position": { "type": "integer" },
+      "converted": { "type": "boolean" },
+      "revenue": { "type": "float" },
+      "latency_ms": { "type": "integer" },
+      "filters_applied": { "type": "keyword" },
+      "facets_used": { "type": "keyword" },
+      "sort_order": { "type": "keyword" },
+      "timestamp": { "type": "date" },
+      "type": { "type": "keyword" }
+    }
+  }
+}
