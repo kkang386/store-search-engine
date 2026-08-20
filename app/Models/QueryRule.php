@@ -13,14 +13,14 @@ class QueryRule extends Model
 
     protected $fillable = [
         'store_id', 'query_pattern', 'match_type', 'action',
-        'product_ids', 'conditions', 'metadata', 'boost_factor',
+        'skus', 'conditions', 'metadata', 'boost_factor',
         'pin_position', 'redirect_url', 'banner_html',
         'include_category_ids', 'exclude_category_ids', 'include_brands',
         'is_active', 'starts_at', 'ends_at', 'priority', 'created_by',
     ];
 
     protected $casts = [
-        'product_ids' => 'array',
+        'skus' => 'array',
         'conditions' => 'array',
         'metadata' => 'array',
         'include_category_ids' => 'array',
@@ -64,7 +64,14 @@ class QueryRule extends Model
     {
         return match ($this->match_type) {
             'exact' => strtolower($query) === strtolower($this->query_pattern),
-            'contains' => str_contains(strtolower($query), strtolower($this->query_pattern)),
+            // Whole-word match, not a raw substring: pattern "bag" matches "gun bag"
+            // but NOT "sku-gbag004". Prevents short patterns from hijacking SKUs/words.
+            // Lookarounds (not \b) so patterns ending in punctuation like "c++"/".308"
+            // still work; preg_quote guards against regex-special chars in the pattern.
+            'contains' => (bool) preg_match(
+                '/(?<!\w)' . preg_quote($this->query_pattern, '/') . '(?!\w)/i',
+                $query
+            ),
             'starts_with' => str_starts_with(strtolower($query), strtolower($this->query_pattern)),
             'regex' => (bool) preg_match('/' . $this->query_pattern . '/i', $query),
             default => false,

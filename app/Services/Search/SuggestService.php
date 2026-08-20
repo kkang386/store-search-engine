@@ -7,11 +7,14 @@ use App\DTOs\SuggestResultDTO;
 use App\Models\SearchAnalytic;
 use App\Repositories\ElasticsearchRepository;
 use App\Services\Admin\QueryRuleService;
+use App\Services\Search\Concerns\ResolvesRuleSkus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class SuggestService
 {
+    use ResolvesRuleSkus;
+
     public function __construct(
         private readonly ElasticsearchRepository $repository,
         private readonly SuggestQueryBuilder $queryBuilder,
@@ -63,7 +66,7 @@ class SuggestService
         $index = config('elasticsearch.indices.products');
 
         $productBody = $this->queryBuilder->buildProductSearch($dto);
-        $productBody = $this->applyQueryRuleScope($productBody, $dto);
+        $productBody = $this->applyQueryRules($productBody, $dto);
         $productResponse = $this->repository->rawSearch($index, $productBody);
 
         $aggBody = $this->queryBuilder->build($dto);
@@ -154,7 +157,7 @@ class SuggestService
         return array_values(array_slice($filtered, 0, 10));
     }
 
-    private function applyQueryRuleScope(array $esBody, SuggestQueryDTO $dto): array
+    private function applyQueryRules(array $esBody, SuggestQueryDTO $dto): array
     {
         if (empty($dto->query)) {
             return $esBody;
@@ -162,11 +165,15 @@ class SuggestService
 
         $rules = $this->queryRuleService->getActiveRules($dto->query, $dto->storeId);
 
+        $pinnedSkus    = [];
         $includeCatIds = [];
         $excludeCatIds = [];
         $includeBrands = [];
 
         foreach ($rules as $rule) {
+            if ($rule->action === 'pin') {
+                $pinnedSkus = array_merge($pinnedSkus, $rule->skus ?? []);
+            }
             $includeCatIds = array_merge($includeCatIds, $rule->include_category_ids ?? []);
             $excludeCatIds = array_merge($excludeCatIds, $rule->exclude_category_ids ?? []);
             $includeBrands = array_merge($includeBrands, $rule->include_brands ?? []);
@@ -191,6 +198,20 @@ class SuggestService
         if (!empty($includeBrands)) {
             $esBody['query']['function_score']['query']['bool']['filter'][] = [
                 'terms' => ['brand' => array_values(array_unique($includeBrands))],
+            ];
+        }
+
+        // Pin rules force their products to the top of the suggestions. Wrap the
+        // scored query in a `pinned` query (same mechanism as full search): the
+        // pinned docs are returned first even if they wouldn't match the typed
+        // prefix. Resolved after scope so pinned ids survive the wrap.
+        $pinnedIds = array_values($this->resolveSkusToIds($pinnedSkus));
+        if (!empty($pinnedIds)) {
+            $esBody['query'] = [
+                'pinned' => [
+                    'ids' => array_map('strval', $pinnedIds),
+                    'organic' => $esBody['query'],
+                ],
             ];
         }
 

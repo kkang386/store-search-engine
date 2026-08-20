@@ -13,6 +13,9 @@ RUN apt-get update && apt-get install -y \
     redis-tools \
     net-tools \
     procps \
+    vim \
+    nano \
+    python3 \
     openssh-server \
     default-mysql-client \
     && apt-get clean \

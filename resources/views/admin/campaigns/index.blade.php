@@ -7,7 +7,7 @@
 <div x-data="campaignsPage()" x-init="init()">
 
     <div class="flex justify-end mb-4">
-        <button @click="showModal = true; editingId = null; form = { name: '', type: 'boost', patternsStr: '', boost_factor: 1.5, starts_at: '', ends_at: '', is_active: true }"
+        <button @click="showModal = true; editingId = null; form = { name: '', type: 'boost', patternsStr: '', skusStr: '', boost_factor: 1.5, starts_at: '', ends_at: '', is_active: true }"
                 class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
             + New Campaign
         </button>
@@ -97,6 +97,10 @@
                     <label class="block text-sm font-medium text-gray-700 mb-1">Boost Factor</label>
                     <input x-model.number="form.boost_factor" type="number" step="0.1" class="w-full border rounded px-3 py-2 text-sm">
                 </div>
+                <div x-show="form.type === 'boost'">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">SKUs (comma-separated)</label>
+                    <input x-model="form.skusStr" placeholder="SKU-1001, SKU-1002, SKU-1003" class="w-full border rounded px-3 py-2 text-sm">
+                </div>
                 <div class="grid grid-cols-2 gap-3">
                     <div><label class="block text-sm font-medium mb-1">Starts At</label>
                         <input x-model="form.starts_at" type="datetime-local" class="w-full border rounded px-3 py-2 text-sm"></div>
@@ -119,7 +123,7 @@
 function campaignsPage() {
     return {
         campaigns: [], showModal: false, editingId: null,
-        form: { name: '', type: 'boost', patternsStr: '', boost_factor: 1.5, starts_at: '', ends_at: '', is_active: true },
+        form: { name: '', type: 'boost', patternsStr: '', skusStr: '', boost_factor: 1.5, starts_at: '', ends_at: '', is_active: true },
 
         get activeCampaigns() { return this.campaigns.filter(c => this.isRunning(c)); },
         get scheduledCampaigns() { return this.campaigns.filter(c => c.is_active && new Date(c.starts_at) > new Date()); },
@@ -133,18 +137,18 @@ function campaignsPage() {
         },
         editCampaign(c) {
             this.editingId = c.id;
-            this.form = { name: c.name, type: c.type, patternsStr: (c.query_patterns||[]).join(', '), boost_factor: c.boost_factor||1.5, starts_at: c.starts_at?.slice(0,16), ends_at: c.ends_at?.slice(0,16), is_active: c.is_active };
+            this.form = { name: c.name, type: c.type, patternsStr: (c.query_patterns||[]).join(', '), skusStr: (c.skus||[]).join(', '), boost_factor: c.boost_factor||1.5, starts_at: c.starts_at?.slice(0,16), ends_at: c.ends_at?.slice(0,16), is_active: c.is_active };
             this.showModal = true;
         },
         async saveCampaign() {
-            const data = { ...this.form, store_id: parseInt(storeId)||null, query_patterns: this.form.patternsStr.split(',').map(s=>s.trim()).filter(Boolean) };
-            delete data.patternsStr;
+            const data = { ...this.form, store_id: parseInt(storeId)||null, query_patterns: this.form.patternsStr.split(',').map(s=>s.trim()).filter(Boolean), skus: this.form.skusStr.split(',').map(s=>s.trim()).filter(Boolean) };
+            delete data.patternsStr; delete data.skusStr;
             const url = this.editingId ? `/api/admin/search/campaigns/${this.editingId}` : '/api/admin/search/campaigns';
             await apiRequest(this.editingId ? 'PUT' : 'POST', url, data);
             this.closeModal(); await this.fetchCampaigns();
         },
         async deleteCampaign(id) { if (!confirm('Delete?')) return; await apiRequest('DELETE', `/api/admin/search/campaigns/${id}`); await this.fetchCampaigns(); },
-        closeModal() { this.showModal = false; this.editingId = null; this.form = { name: '', type: 'boost', patternsStr: '', boost_factor: 1.5, starts_at: '', ends_at: '', is_active: true }; },
+        closeModal() { this.showModal = false; this.editingId = null; this.form = { name: '', type: 'boost', patternsStr: '', skusStr: '', boost_factor: 1.5, starts_at: '', ends_at: '', is_active: true }; },
     };
 }
 </script>

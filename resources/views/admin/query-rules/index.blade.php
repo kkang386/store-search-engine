@@ -117,8 +117,8 @@
                 </div>
 
                 <div x-show="['pin','exclude','boost','bury'].includes(form.action)">
-                    <label class="block text-sm font-medium text-gray-700 mb-1">Product IDs (comma-separated)</label>
-                    <input x-model="form.productIdsStr" placeholder="123, 456, 789" class="w-full border rounded px-3 py-2 text-sm">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">SKUs (comma-separated)</label>
+                    <input x-model="form.skusStr" placeholder="SKU-1001, SKU-1002, SKU-1003" class="w-full border rounded px-3 py-2 text-sm">
                 </div>
 
                 <div x-show="form.action === 'boost'">
@@ -278,7 +278,7 @@ function queryRulesPage() {
         rules: [], showModal: false, editingId: null,
         form: {
             query_pattern: '', match_type: 'exact', action: 'pin', priority: 0,
-            productIdsStr: '', boost_factor: 1.5, redirect_url: '', banner_html: '',
+            skusStr: '', boost_factor: 1.5, redirect_url: '', banner_html: '',
             starts_at: '', ends_at: '', is_active: true,
         },
         pickers: {
@@ -338,7 +338,7 @@ function queryRulesPage() {
                 match_type: rule.match_type,
                 action: rule.action,
                 priority: rule.priority,
-                productIdsStr: (rule.product_ids || []).join(', '),
+                skusStr: (rule.skus || []).join(', '),
                 boost_factor: rule.boost_factor || 1.5,
                 redirect_url: rule.redirect_url || '',
                 banner_html: rule.banner_html || '',
@@ -357,8 +357,8 @@ function queryRulesPage() {
 
         async saveRule() {
             const data = { ...this.form, store_id: parseInt(storeId) || null };
-            data.product_ids = this.form.productIdsStr.split(',').map(s => parseInt(s.trim())).filter(Boolean);
-            delete data.productIdsStr;
+            data.skus = this.form.skusStr.split(',').map(s => s.trim()).filter(Boolean);
+            delete data.skusStr;
             data.include_category_ids = this.pickers.includeCat.items.map(i => i.id);
             data.exclude_category_ids = this.pickers.excludeCat.items.map(i => i.id);
             data.include_brands = this.pickers.includeBrand.items.map(i => i.id);
@@ -386,7 +386,7 @@ function queryRulesPage() {
             this.editingId = null;
             this.form = {
                 query_pattern: '', match_type: 'exact', action: 'pin', priority: 0,
-                productIdsStr: '', boost_factor: 1.5, redirect_url: '', banner_html: '',
+                skusStr: '', boost_factor: 1.5, redirect_url: '', banner_html: '',
                 starts_at: '', ends_at: '', is_active: true,
             };
             this.resetPickers();

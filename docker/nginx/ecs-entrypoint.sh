@@ -7,6 +7,10 @@ printf '%s\n' "$SSL_CERT"        > /etc/nginx/certs/cert.pem
 printf '%s\n' "$SSL_KEY"         > /etc/nginx/certs/key.pem
 printf '%s\n' "$SSL_CA_BUNDLE_1" > /etc/nginx/certs/ca-bundle.pem
 printf '%s\n' "$SSL_CA_BUNDLE_2" >> /etc/nginx/certs/ca-bundle.pem
+# Optional third CA-bundle piece (some sites need 3); only append when provided.
+if [ -n "$SSL_CA_BUNDLE_3" ]; then
+    printf '%s\n' "$SSL_CA_BUNDLE_3" >> /etc/nginx/certs/ca-bundle.pem
+fi
 
 chmod 600 /etc/nginx/certs/key.pem
 

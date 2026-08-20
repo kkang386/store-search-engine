@@ -13,13 +13,13 @@ class SearchCampaign extends Model
 
     protected $fillable = [
         'store_id', 'name', 'description', 'type',
-        'query_patterns', 'product_ids', 'boost_factor',
+        'query_patterns', 'skus', 'boost_factor',
         'banner_config', 'is_active', 'starts_at', 'ends_at', 'created_by',
     ];
 
     protected $casts = [
         'query_patterns' => 'array',
-        'product_ids' => 'array',
+        'skus' => 'array',
         'boost_factor' => 'float',
         'banner_config' => 'array',
         'is_active' => 'boolean',

@@ -121,6 +121,30 @@ class QueryBuilder
                             'type' => 'best_fields',
                         ],
                     ],
+                    // Prefix match on the SKU so partial SKUs (e.g. "SKU-GBB") surface,
+                    // matching the suggest path instead of relying on whole-token matches.
+                    [
+                        'match_bool_prefix' => [
+                            'sku.text' => [
+                                'query' => $query,
+                                'boost' => 50,
+                            ],
+                        ],
+                    ],
+                    // Exact (case-insensitive) SKU match, pinned to the top: the boost is
+                    // large enough that even the out-of-stock penalty in the function_score
+                    // can't push it below other results — a 100% SKU match on an active
+                    // product always ranks first, regardless of quantity or popularity.
+                    // Only fires on an exact full-SKU query, so normal searches are unaffected.
+                    [
+                        'term' => [
+                            'sku' => [
+                                'value' => $query,
+                                'boost' => 100000,
+                                'case_insensitive' => true,
+                            ],
+                        ],
+                    ],
                 ],
                 'minimum_should_match' => 1,
             ],

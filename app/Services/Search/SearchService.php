@@ -14,11 +14,14 @@ use App\Models\Store;
 use App\Repositories\ElasticsearchRepository;
 use App\Services\Admin\QueryRuleService;
 use App\Services\Admin\CampaignService;
+use App\Services\Search\Concerns\ResolvesRuleSkus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class SearchService
 {
+    use ResolvesRuleSkus;
+
     public function __construct(
         private readonly ElasticsearchRepository $repository,
         private readonly QueryBuilder $queryBuilder,
@@ -134,8 +137,8 @@ class SearchService
 
         $rules = $this->queryRuleService->getActiveRules($dto->query, $dto->storeId);
 
-        $pinnedIds     = [];
-        $excludedIds   = [];
+        $pinnedSkus    = [];
+        $excludedSkus  = [];
         $boostRules    = [];
         $includeCatIds = [];
         $excludeCatIds = [];
@@ -144,10 +147,10 @@ class SearchService
         foreach ($rules as $rule) {
             switch ($rule->action) {
                 case 'pin':
-                    $pinnedIds = array_merge($pinnedIds, $rule->product_ids ?? []);
+                    $pinnedSkus = array_merge($pinnedSkus, $rule->skus ?? []);
                     break;
                 case 'exclude':
-                    $excludedIds = array_merge($excludedIds, $rule->product_ids ?? []);
+                    $excludedSkus = array_merge($excludedSkus, $rule->skus ?? []);
                     break;
                 case 'boost':
                     $boostRules[] = $rule;
@@ -158,6 +161,21 @@ class SearchService
             $excludeCatIds = array_merge($excludeCatIds, $rule->exclude_category_ids ?? []);
             $includeBrands = array_merge($includeBrands, $rule->include_brands ?? []);
         }
+
+        // Rules reference products by SKU (the human-facing key); resolve every
+        // referenced SKU to its product id (= ES _id) in one lookup, then feed
+        // the ids to the pin/exclude/boost ES clauses below.
+        $skuToId       = $this->resolveSkusToIds(array_merge(
+            $pinnedSkus,
+            $excludedSkus,
+            ...array_map(fn (QueryRule $r) => $r->skus ?? [], $boostRules),
+        ));
+        $skusToIds     = fn (array $skus) => array_values(array_intersect_key(
+            $skuToId,
+            array_flip($skus),
+        ));
+        $pinnedIds     = $skusToIds($pinnedSkus);
+        $excludedIds   = $skusToIds($excludedSkus);
 
         // Scoping a rule to a category also covers its subcategories.
         $includeCatIds = $this->categoryService->withDescendants($includeCatIds);
@@ -173,8 +191,12 @@ class SearchService
 
         if (!empty($boostRules)) {
             foreach ($boostRules as $rule) {
+                $boostIds = $skusToIds($rule->skus ?? []);
+                if (empty($boostIds)) {
+                    continue;
+                }
                 $esBody['query']['function_score']['functions'][] = [
-                    'filter' => ['ids' => ['values' => array_map('strval', $rule->product_ids ?? [])]],
+                    'filter' => ['ids' => ['values' => array_map('strval', $boostIds)]],
                     'weight' => $rule->boost_factor ?? 2.0,
                 ];
             }
@@ -221,10 +243,14 @@ class SearchService
         $campaigns = $this->campaignService->getActiveCampaigns($dto->query, $dto->storeId);
 
         foreach ($campaigns as $campaign) {
-            if ($campaign->type === 'boost' && !empty($campaign->product_ids)) {
+            if ($campaign->type === 'boost' && !empty($campaign->skus)) {
+                $ids = array_values($this->resolveSkusToIds($campaign->skus));
+                if (empty($ids)) {
+                    continue;
+                }
                 $functions = $esBody['query']['function_score']['functions'] ?? [];
                 $functions[] = [
-                    'filter' => ['ids' => ['values' => array_map('strval', $campaign->product_ids)]],
+                    'filter' => ['ids' => ['values' => array_map('strval', $ids)]],
                     'weight' => $campaign->boost_factor ?? 1.5,
                 ];
                 $esBody['query']['function_score']['functions'] = $functions;
