@@ -88,4 +88,26 @@ class QueryRuleController extends Controller
         $this->service->delete($queryRule);
         return response()->noContent();
     }
+
+    public function import(Request $request): JsonResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+        ]);
+
+        $content = $request->file('file')->getContent();
+        $result = $this->service->bulkImport($content, $request->integer('store_id') ?: null);
+
+        return response()->json($result);
+    }
+
+    public function export(Request $request): Response
+    {
+        $csv = $this->service->exportCsv($request->integer('store_id') ?: null);
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="query-rules.csv"',
+        ]);
+    }
 }

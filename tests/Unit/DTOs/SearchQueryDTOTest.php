@@ -70,6 +70,10 @@ class SearchQueryDTOTest extends TestCase
 
     public function test_per_page_max_capped(): void
     {
+        // Pin the cap so the assertion is independent of the ambient
+        // SEARCH_PER_PAGE_MAX env (the container sets it to 192).
+        config(['search.per_page_max' => 100]);
+
         $dto = SearchQueryDTO::fromRequest(['per_page' => 9999]);
         $this->assertLessThanOrEqual(100, $dto->perPage);
     }

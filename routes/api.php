@@ -5,10 +5,19 @@ use App\Http\Controllers\Admin\ImportController;
 use App\Http\Controllers\Admin\SearchScopeController;
 use App\Http\Controllers\Admin\StoreApiTokenController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\ImportController as ApiImportController;
 use App\Http\Controllers\Api\SearchController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth.api_token')->get('/health', [HealthController::class, 'check']);
+
+// Store-token-authenticated bulk import. The bearer token identifies the store;
+// the {store} id in the URL must match it (enforced in the controller).
+Route::middleware('auth.api_token')->prefix('import')->group(function () {
+    Route::post('{store}/categories', [ApiImportController::class, 'categories'])->name('import.categories');
+    Route::post('{store}/products', [ApiImportController::class, 'products'])->name('import.products');
+    Route::get('{store}/status/{requestId}', [ApiImportController::class, 'status'])->name('import.status');
+});
 
 Route::middleware('auth.api_token')->prefix('search')->group(function () {
     Route::get('/', [SearchController::class, 'search'])->name('search');
@@ -20,15 +29,23 @@ Route::middleware(['web', 'auth', 'search.admin'])->prefix('admin/search')->grou
 
     // manage synonyms — search_admin, merchandiser
     Route::middleware('permission:manage synonyms')->group(function () {
-        Route::apiResource('synonyms', \App\Http\Controllers\Admin\SynonymController::class);
+        // Literal routes MUST precede the apiResource, or `synonyms/export` and
+        // `synonyms/import` are captured by the `synonyms/{synonym}` wildcard.
         Route::post('synonyms/import', [\App\Http\Controllers\Admin\SynonymController::class, 'import'])
             ->name('admin.synonyms.import');
         Route::get('synonyms/export', [\App\Http\Controllers\Admin\SynonymController::class, 'export'])
             ->name('admin.synonyms.export');
+        Route::apiResource('synonyms', \App\Http\Controllers\Admin\SynonymController::class);
     });
 
     // manage query rules — search_admin, merchandiser
     Route::middleware('permission:manage query rules')->group(function () {
+        // Literal routes MUST precede the apiResource, or `query-rules/export` and
+        // `query-rules/import` are captured by the `query-rules/{query_rule}` wildcard.
+        Route::post('query-rules/import', [\App\Http\Controllers\Admin\QueryRuleController::class, 'import'])
+            ->name('api.admin.query-rules.import');
+        Route::get('query-rules/export', [\App\Http\Controllers\Admin\QueryRuleController::class, 'export'])
+            ->name('api.admin.query-rules.export');
         Route::apiResource('query-rules', \App\Http\Controllers\Admin\QueryRuleController::class)
             ->names([
                 'index'   => 'api.admin.query-rules.index',

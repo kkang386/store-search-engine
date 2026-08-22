@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Http\Middleware\AuthenticateApiToken;
 use App\Models\Product;
 use App\Services\Search\SearchService;
 use App\DTOs\SearchQueryDTO;
@@ -13,6 +14,14 @@ use Mockery;
 
 class SearchApiTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // These tests exercise controller/validation logic with a mocked service;
+        // bypass the API-token middleware so they don't need a seeded store token.
+        $this->withoutMiddleware(AuthenticateApiToken::class);
+    }
+
     public function test_search_endpoint_returns_200(): void
     {
         $this->mockSearchService();

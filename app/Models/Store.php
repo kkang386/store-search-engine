@@ -30,7 +30,7 @@ class Store extends Model
     public function categories(): BelongsToMany
     {
         return $this->belongsToMany(Category::class, 'store_categories')
-            ->withPivot('is_active', 'sort_order')
+            ->withPivot('is_active', 'sort_order', 'external_id')
             ->withTimestamps()
             ->orderByPivot('sort_order');
     }

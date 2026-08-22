@@ -6,10 +6,28 @@
 @section('content')
 <div x-data="queryRulesPage()" x-init="init()">
 
-    <div class="flex justify-end mb-4">
+    <div class="flex justify-end gap-2 mb-4">
         <button @click="showModal = true" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">
             + Add Rule
         </button>
+        <a :href="'/api/admin/search/query-rules/export' + (storeId ? ('?store_id=' + storeId) : '')"
+           class="border border-gray-300 px-4 py-2 rounded-lg text-sm hover:bg-gray-50 bg-white">
+            Export CSV
+        </a>
+    </div>
+
+    <!-- Import Zone -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6 flex items-center gap-4">
+        <div class="flex-1">
+            <div class="font-medium text-blue-800 text-sm">Bulk Import</div>
+            <div class="text-blue-600 text-xs">Upload a CSV with columns: query_pattern, match_type, action, skus, boost_factor, pin_position, redirect_url, banner_html, include_category_ids, exclude_category_ids, include_brands, priority, is_active, starts_at, ends_at</div>
+        </div>
+        <form action="{{ route('api.admin.query-rules.import') }}" method="POST" enctype="multipart/form-data">
+            @csrf
+            <input type="hidden" name="store_id" :value="storeId">
+            <input type="file" name="file" accept=".csv" class="text-sm" required>
+            <button type="submit" class="ml-2 bg-blue-600 text-white px-3 py-1.5 rounded text-sm">Import</button>
+        </form>
     </div>
 
     <!-- Info Banner -->

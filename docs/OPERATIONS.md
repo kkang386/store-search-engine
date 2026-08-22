@@ -313,6 +313,63 @@ aws s3 ls s3://<IMPORTS_BUCKET>/imports/store-a/
 aws s3 cp s3://<IMPORTS_BUCKET>/imports/store-a/products.csv /tmp/products.csv
 ```
 
+### Import API (JSON, token-authenticated)
+
+An alternative to the CSV pipeline: external systems push catalog data as JSON to
+`POST /api/import/{store}/categories` and `POST /api/import/{store}/products`, and
+poll `GET /api/import/{store}/status/{request_id}`. Auth is the same store bearer
+token as the search API; the token must belong to the `{store}` in the URL (else `403`).
+The end-user field reference and examples are in the README — this section covers how it
+behaves on the search system.
+
+**Asynchronous by design.** The request is validated synchronously (a bad payload is
+rejected `422` immediately, with no tracking record), then a row is written to
+`import_requests` (status `in-progress`), a `ProcessApiImportJob` is dispatched to the
+**`imports` queue**, and the caller gets `202` with a `request_id`. The actual DB upsert
+and indexing happen in the worker, not in the request. **If no worker is consuming the
+`imports` queue, the request stays `in-progress` indefinitely** — the same worker that
+handles CSV imports must be running.
+
+**What the job does:**
+
+- **Products** — upsert by `sku` (mirrors the CSV path: writes the product row and the
+  per-store `store_products` price/inventory/is_active). Per-product observer indexing is
+  suppressed during the batch, then the affected products are reindexed in **one** bulk
+  pass **inside the job**, which bumps `search_index_version` and busts the search cache.
+  So a `completed` status means the products are already live in search.
+- **Categories** — upsert by `slug`; `parent_category_id` is resolved to the internal
+  `parent_id`. The client's external `category_id` is stored per-store on
+  `store_categories.external_id` — this is the bridge the product endpoint uses to resolve
+  `product_categories`. **Categories are not indexed.** A renamed category is denormalized
+  into product documents, so it only refreshes when those products are next reindexed
+  (a product upsert, or a manual `search:reindex`).
+
+**Ordering:** import categories before the products that reference them; otherwise the
+external category ids won't resolve and those links are silently skipped.
+
+**Status semantics:** `completed` = upsert + indexing done, zero row failures;
+`error` = the job threw, or `failed > 0` (individual bad rows are caught, counted, and
+logged — they don't abort the batch); `in-progress` = still queued/running. The job is
+idempotent (upsert by sku/slug) and retries up to 3 times. The stored `payload` is cleared
+once the request reaches a terminal state.
+
+```bash
+# Inspect recent import-API requests
+php artisan tinker --execute="
+App\Models\ImportRequest::latest()->take(10)
+  ->get(['request_id','store_id','type','status','total','created_count','updated_count','failed_count','indexed_count'])
+  ->each(fn(\$r) => print(\$r->status.' '.\$r->type.' store='.\$r->store_id
+    .' total='.\$r->total.' failed='.\$r->failed_count.' ['.\$r->request_id.']'.PHP_EOL));
+"
+
+# Depth of the imports queue (pending API + CSV import jobs)
+redis-cli -n 3 LLEN "search_engine_database_queues:imports"
+```
+
+If requests are stuck at `in-progress`, check that the worker is up and draining the
+`imports` queue (see [Queue Management](#queue-management)) and look for failures with
+`php artisan queue:failed`.
+
 ---
 
 ## Logs

@@ -40,7 +40,7 @@ class SynonymService
 
     public function bulkImport(string $csvContent): array
     {
-        $csv = Reader::createFromString($csvContent);
+        $csv = Reader::fromString($csvContent);
         $csv->setHeaderOffset(0);
 
         $created = 0;
@@ -90,7 +90,7 @@ class SynonymService
     {
         $synonyms = Synonym::active()->get();
 
-        $csv = Writer::createFromString('');
+        $csv = Writer::fromString('');
         $csv->insertOne(['type', 'terms', 'from_term', 'to_term']);
 
         foreach ($synonyms as $synonym) {

@@ -11,11 +11,11 @@ A production-grade, self-hostable **e-commerce search service** powered by **Ela
 - **Full-text product search** — typo tolerance (fuzzy), stemming, and synonym expansion, with relevance tuning.
 - **Autocomplete / suggestions** — search-as-you-type and completion suggesters.
 - **Faceted search** — brand, category, price-range and attribute facets with counts.
-- **Merchandising query rules** — pin, boost, bury/exclude, redirect, and banner rules; scope a rule to a category (and **all its subcategories**) or brand; priority and active time windows.
-- **Synonyms** — global synonym management via the native **Elasticsearch Synonyms API**; edits are pushed to the live synonym set and search analyzers are reloaded **immediately** (no reindex).
-- **Campaigns** — scheduled boosts and promotional banners.
+- **Merchandising query rules** — pin, boost, bury/exclude, redirect, and banner rules; pin/boost/exclude products **by SKU**; scope a rule to a category (and **all its subcategories**) or brand; priority and active time windows; **CSV import/export**.
+- **Synonyms** — global synonym management via the native **Elasticsearch Synonyms API**; edits are pushed to the live synonym set and search analyzers are reloaded **immediately** (no reindex); **CSV import/export**.
+- **Campaigns** — scheduled boosts and promotional banners, targeted **by SKU**.
 - **Search analytics** — queries, click-through, conversion, latency; a dashboard for zero-result queries, top terms, and performance.
-- **Catalog import pipeline** — per-store CSV import of products/categories, auto-picked-up on a schedule and **bulk-indexed** into Elasticsearch.
+- **Catalog import** — per-store **CSV pipeline** (auto-picked-up on a schedule and **bulk-indexed**) plus a token-authenticated **JSON import API** with asynchronous processing and pollable per-request status.
 - **Admin UI** — dashboard, analytics, query rules, synonyms, campaigns, live search preview, ranking, audit log, and user management, with **role-based access** (`system_admin`, `search_admin`, `merchandiser`, `analyst`, `read_only`).
 
 ## Tech stack
@@ -81,6 +81,40 @@ The public search endpoints are authenticated with a per-store API token (`Autho
 curl -H "Authorization: Bearer <API_TOKEN>" \
   "http://localhost:8080/api/search?q=wireless+headphones&per_page=24"
 ```
+
+---
+
+## Import API
+
+Bulk-upsert your catalog over HTTP as an alternative to the CSV pipeline. Authenticated with the same per-store bearer token as the search API; the store id also appears in the URL and must match the token (else `403`).
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `POST` | `/api/import/{store}/categories` | Upsert categories (JSON array) |
+| `POST` | `/api/import/{store}/products` | Upsert products + category links (JSON array) |
+| `GET` | `/api/import/{store}/status/{request_id}` | Poll a request's status |
+
+Processing is **asynchronous**: a valid request is accepted with `202` and a `request_id`; a background worker performs the upsert and (for products) reindexes into Elasticsearch, then records the outcome. Import **categories before** the products that reference them — products link categories by the external `category_id` you sent.
+
+```bash
+# 1) Categories (category_id is your external id; parent_category_id references it)
+curl -X POST "http://localhost:8080/api/import/1/categories" \
+  -H "Authorization: Bearer <API_TOKEN>" -H "Content-Type: application/json" \
+  -d '[{"category_id":"100","parent_category_id":null,"name":"Audio","slug":"audio"}]'
+
+# 2) Products (product_categories = external category ids; first is primary)
+curl -X POST "http://localhost:8080/api/import/1/products" \
+  -H "Authorization: Bearer <API_TOKEN>" -H "Content-Type: application/json" \
+  -d '[{"sku":"WH-1","name":"Wireless Headphones","price":99.9,"inventory":25,
+        "attributes":{"color":"black"},"product_categories":[100]}]'
+# → {"request_id":"<uuid>","status":"in-progress","total":1}
+
+# 3) Poll status → "completed" | "in-progress" | "error"
+curl -H "Authorization: Bearer <API_TOKEN>" \
+  "http://localhost:8080/api/import/1/status/<uuid>"
+```
+
+Product objects accept `sku, name, slug, brand, description, price, inventory, is_active, attributes, images, meta, sales_rank, product_categories`; category objects accept `category_id, parent_category_id, name, slug, depth, sort_order, is_active`. `completed` means the upsert **and** indexing are done with no row failures; `error` means the job failed or some rows were rejected (`result.failed > 0`).
 
 ---
 

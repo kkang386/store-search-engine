@@ -3,12 +3,30 @@
 namespace Tests\Feature\Api;
 
 use App\DTOs\SuggestResultDTO;
+use App\Http\Middleware\AuthenticateApiToken;
+use App\Models\Store;
 use App\Services\Search\SuggestService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 use Mockery;
 
 class SuggestApiTest extends TestCase
 {
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Exercise controller/validation with a mocked service; bypass the
+        // API-token middleware so no seeded store token is required.
+        $this->withoutMiddleware(AuthenticateApiToken::class);
+        // store_id is validated with exists:stores,id — ensure store id 2 exists
+        // so the store_id=2 case passes validation and reaches the mocked service.
+        // Force the id explicitly: RefreshDatabase uses transactions (not
+        // migrate:fresh), so auto-increment is not reset between tests.
+        Store::forceCreate(['id' => 2, 'name' => 'Store Two', 'code' => 'store-2']);
+    }
+
     public function test_suggest_returns_correct_structure(): void
     {
         $mock = Mockery::mock(SuggestService::class);

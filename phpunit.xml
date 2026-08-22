@@ -20,15 +20,26 @@
     </source>
 
     <php>
-        <env name="APP_ENV" value="testing"/>
-        <env name="APP_KEY" value="base64:testtesttesttesttesttesttesttesttesttest="/>
-        <env name="BCRYPT_ROUNDS" value="4"/>
-        <env name="CACHE_STORE" value="array"/>
-        <env name="DB_CONNECTION" value="sqlite"/>
-        <env name="DB_DATABASE" value=":memory:"/>
-        <env name="ELASTICSEARCH_HOST" value="localhost"/>
-        <env name="ELASTICSEARCH_PORT" value="9200"/>
-        <env name="QUEUE_CONNECTION" value="sync"/>
-        <env name="SESSION_DRIVER" value="array"/>
+        <!-- Tests run against a DEDICATED MySQL database (search_engine_test), never
+             the real one — the migrations use MySQL-specific DDL so sqlite is not an
+             option. NOTE: the Docker container sets DB_DATABASE=search_engine in
+             $_SERVER, and Laravel's env() reads $_SERVER first, so these <env>/<server>
+             entries cannot be relied on alone — tests/TestCase.php forces DB_DATABASE
+             to the test database before the app boots and hard-aborts otherwise. -->
+        <server name="APP_ENV" value="testing" force="true"/>
+        <server name="DB_DATABASE" value="search_engine_test" force="true"/>
+        <server name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <server name="CACHE_STORE" value="array" force="true"/>
+        <server name="SESSION_DRIVER" value="array" force="true"/>
+
+        <env name="APP_ENV" value="testing" force="true"/>
+        <env name="APP_KEY" value="base64:testtesttesttesttesttesttesttesttesttest=" force="true"/>
+        <env name="BCRYPT_ROUNDS" value="4" force="true"/>
+        <env name="CACHE_STORE" value="array" force="true"/>
+        <env name="DB_DATABASE" value="search_engine_test" force="true"/>
+        <env name="ELASTICSEARCH_HOST" value="localhost" force="true"/>
+        <env name="ELASTICSEARCH_PORT" value="9200" force="true"/>
+        <env name="QUEUE_CONNECTION" value="sync" force="true"/>
+        <env name="SESSION_DRIVER" value="array" force="true"/>
     </php>
 </phpunit>

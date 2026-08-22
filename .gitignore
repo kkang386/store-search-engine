@@ -3,14 +3,14 @@
 .env.*
 !.env.example
 !.env.local
+# Per-environment local secret files (note: .env.* does NOT match .env-local-*)
+.env-local*
 /.gitignore-all/
 
-# SSL certificates (never commit private keys or certs)
-docker/nginx/certs/*.pem
-docker/nginx/certs/*.crt
-docker/nginx/certs/*.key
-docker/nginx/certs/*.ca-bundle
-docker/nginx/certs/*.txt
+# SSL certificates (never commit private keys or certs) — whole certs/ dir,
+# including any dated subdirectories
+docker/nginx/certs/*
+!docker/nginx/certs/.gitkeep
 
 # Dependencies
 /vendor/
@@ -42,9 +42,10 @@ composer.lock
 .DS_Store
 Thumbs.db
 
-# IDE
+# IDE / local tooling
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 
